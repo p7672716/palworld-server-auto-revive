@@ -602,23 +602,33 @@ end
 
 log("main.lua loaded; server-side only; native revive path enabled")
 
-register_pre_post_hook(
-    "/Script/Pal.PalNetworkCharacterContainerComponent:RequestMoveToPalBox_ToServer_Rep",
-    on_box_move_request_pre,
-    function() end
-)
+local function register_hooks()
+    log("registering hooks after delayed UE initialization")
 
-register_post_hook(
-    "/Script/Pal.PalOtomoHolderComponentBase:OnUpdateSlot",
-    on_party_slot_updated
-)
+    register_pre_post_hook(
+        "/Script/Pal.PalNetworkCharacterContainerComponent:RequestMoveToPalBox_ToServer_Rep",
+        on_box_move_request_pre,
+        function() end
+    )
 
-register_post_hook(
-    "/Script/Pal.PalPlayerCharacter:CallRespawnDelegate",
-    on_respawn
-)
+    register_post_hook(
+        "/Script/Pal.PalOtomoHolderComponentBase:OnUpdateSlot",
+        on_party_slot_updated
+    )
 
-register_post_hook(
-    "/Script/Pal.PalBuilderComponent:OnEnterBaseCamp",
-    on_enter_base_camp
-)
+    register_post_hook(
+        "/Script/Pal.PalPlayerCharacter:CallRespawnDelegate",
+        on_respawn
+    )
+
+    register_post_hook(
+        "/Script/Pal.PalBuilderComponent:OnEnterBaseCamp",
+        on_enter_base_camp
+    )
+end
+
+if ExecuteWithDelay ~= nil then
+    ExecuteWithDelay(10000, register_hooks)
+else
+    log("ExecuteWithDelay is unavailable; hooks were not registered")
+end
