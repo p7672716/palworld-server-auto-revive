@@ -21,8 +21,9 @@ The repository was cloned to the target server and the MOD files are present. Th
 - archive: `/home/serveradmin/servers/palworld-backups/pre-mod-palworld-20260802T163237JST.tar.gz`
 - SHA256: `3919104f73d16ff554e062272f91d63281c11f660dcffb8877e07d2ed1543ee5`
 
-The target's Palworld build is `v1.0.2.100993`. The stable UE4SS Linux v3.0.2 library loads, but reports Linux limited mode and does not expose the UE hooks required by this MOD. The newer v3.0.26-linux-dev build reached full mode but then raised SIGSEGV during UE4SS initialization even with both Lua mods disabled, so it was rolled back. The target currently keeps `PalworldServerAutoRevive : 0` until a compatible UE4SS Linux build is available.
+The target's Palworld build is `v1.0.2.100993`. The stable UE4SS Linux v3.0.2 library loads, but reports Linux limited mode and does not expose the UE hooks required by this MOD. The newer v3.0.26-linux-dev build reached full mode but then raised SIGSEGV during UE4SS initialization even with both Lua mods disabled, so it was rolled back. A custom native Linux build with Palworld layout support also reached the required address resolution but still crashed during UE4SS startup and was rolled back. The target currently keeps `PalworldServerAutoRevive : 0` until a compatible UE4SS Linux build is available.
 
+The detailed result, hashes, rollback state, and restart conditions are recorded in [docs/COMPATIBILITY-DEBIAN-2026-08-02.md](docs/COMPATIBILITY-DEBIAN-2026-08-02.md).
 
 ## Behavior
 
@@ -68,7 +69,7 @@ printf 'PalworldServerAutoRevive : 1\n' \
 
 Install the Linux UE4SS base and the persistent systemd `LD_PRELOAD` drop-in before starting the server. The exact procedure, including the mandatory save backup and rollback, is in [docs/INSTALL-DEBIAN.md](docs/INSTALL-DEBIAN.md).
 
-Do not start the server with the mod until a backup exists and the UE4SS archive checksum has been verified.
+Do not start the server with the mod until a backup exists and the UE4SS archive checksum has been verified. On the currently tested Debian target, keep the mod disabled until the compatibility conditions in the dated report are satisfied.
 
 ## Testing
 
