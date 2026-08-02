@@ -76,7 +76,8 @@ if [ ! -e "$BIN/UE4SS-settings.ini" ]; then
 [General]
 EnableHotReloadSystem=false
 EnableAutoReloadingLuaMods=false
-UseCache=true
+UseCache=false
+bUseUObjectArrayCache=false
 InvalidateCacheIfDLLDiffers=true
 EnableDebugKeyBindings=false
 
@@ -119,6 +120,19 @@ systemctl --user show palworld.service -p Environment
 ## 6. 起動と基盤確認
 
 最初の起動では、ゲームプレイ試験より先にUE4SSロードを確認する。
+
+### 対象Debianで確認済みの制約
+
+対象サーバー（Palworld `v1.0.2.100993`）では、安定版UE4SS Linux v3.0.2はロードできますが、Linux limited modeとなりUEフックが利用できません。最新確認版 v3.0.26-linux-devは、Palworld用 `MemberVariableLayout.ini` を配置してfull modeまで進むものの、MODを無効にした状態でもUE4SS初期化中にSIGSEGVとなりました。
+
+そのため、対象サーバーではCloneと基盤配置まで行ったうえで、現在は次の行を無効化しています。
+
+```text
+PalworldServerAutoRevive : 0
+```
+
+互換性のあるUE4SS Linuxビルドが確認できるまで、`: 1`へ変更してイベント試験へ進めないこと。互換ビルドが得られた後に、バックアップ、フック登録4件、ゲーム内受入試験の順で再開する。
+
 
 ```bash
 systemctl --user start palworld.service
