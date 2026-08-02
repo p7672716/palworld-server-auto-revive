@@ -14,6 +14,16 @@ This project targets the native Linux Palworld server through the community [UE4
 
 The initial target server was Palworld Steam AppID 2394010, buildid 24445026, on Debian 13. The implementation is intentionally Lua-only so that the mod itself does not need a Windows DLL or a native C++ build.
 
+### Debian target verification status (2026-08-02)
+
+The repository was cloned to the target server and the MOD files are present. The save/config backup was completed before installation:
+
+- archive: `/home/serveradmin/servers/palworld-backups/pre-mod-palworld-20260802T163237JST.tar.gz`
+- SHA256: `3919104f73d16ff554e062272f91d63281c11f660dcffb8877e07d2ed1543ee5`
+
+The target's Palworld build is `v1.0.2.100993`. The stable UE4SS Linux v3.0.2 library loads, but reports Linux limited mode and does not expose the UE hooks required by this MOD. The newer v3.0.26-linux-dev build reached full mode but then raised SIGSEGV during UE4SS initialization even with both Lua mods disabled, so it was rolled back. The target currently keeps `PalworldServerAutoRevive : 0` until a compatible UE4SS Linux build is available.
+
+
 ## Behavior
 
 “瀕死” is deliberately narrow:
