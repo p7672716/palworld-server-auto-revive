@@ -1,0 +1,127 @@
+diff --git a/UE4SS/src/Mod/LuaMod.cpp b/UE4SS/src/Mod/LuaMod.cpp
+index 1322e5f..c3818fc 100644
+--- a/UE4SS/src/Mod/LuaMod.cpp
++++ b/UE4SS/src/Mod/LuaMod.cpp
+@@ -6626,7 +6626,16 @@ Overloads:
+ 
+     auto LuaMod::on_program_start() -> void
+     {
++#ifdef __linux__
++        // The stripped Palworld Linux binary exposes a valid GUObjectArray for
++        // enumeration, but its delete-listener storage is not ABI-compatible
++        // with the generic UE4SS layout. Registering this optional listener
++        // crashes during startup before ProcessEvent hooks can be used.
++        // The auto-revive MOD does not retain UObject references across frames,
++        // so the listener is not required for this server-only build.
++#else
+         Unreal::UObjectArray::AddUObjectDeleteListener(&LuaType::FLuaObjectDeleteListener::s_lua_object_delete_listener);
++#endif
+         const Unreal::Hook::FCallbackOptions common_opts {false, false, STR("UE4SS"), STR("LuaModImpl")};
+         Unreal::Hook::RegisterLoadMapPreCallback(
+                 [](Unreal::Hook::TCallbackIterationData<bool>& CallbackIterationData, Unreal::UEngine* Engine, Unreal::FWorldContext& WorldContext, Unreal::FURL URL, Unreal::UPendingNetGame* PendingGame, Unreal::FString& Error) {
+diff --git a/UE4SS/src/UE4SSProgram.cpp b/UE4SS/src/UE4SSProgram.cpp
+index 9aa81b7..4bd07dc 100644
+--- a/UE4SS/src/UE4SSProgram.cpp
++++ b/UE4SS/src/UE4SSProgram.cpp
+@@ -693,14 +693,21 @@ namespace RC
+             // for full UE post-init. This enables fire_unreal_init_for_cpp_mods() (so C++ mods
+             // get on_unreal_init() and can use UE API) and setup_unreal_properties() (for Lua).
+             // Also requires FName::ConstructorInternal to be resolved (for FName() calls in setup_unreal_properties).
+-            if (m_custom_member_variable_layout_loaded && Unreal::FName::ConstructorInternal.is_ready())
++            // On stripped Linux builds the resolver may assign a valid FName
++            // constructor address without transitioning the generic address
++            // holder to its Windows-style "ready" state. Use the actual
++            // resolved address for the Linux full-mode gate.
++            if (m_custom_member_variable_layout_loaded &&
++                (Unreal::FName::ConstructorInternal.get_function_address() != nullptr))
+             {
+                 UE4SS_DBG("[UE4SS] Linux: full mode — MemberVariableLayout.ini loaded, calling fire_unreal_init_for_cpp_mods() and setup_unreal_properties().\n");
+                 fprintf(stderr, "[UE4SS] Linux: full mode enabled (MemberVariableLayout.ini + FName constructor resolved).\n");
+                 Output::send(STR("Unreal Engine modules ({}):\n"), SigScannerStaticData::m_is_modular ? STR("modular") : STR("non-modular"));
+ 
+-                TRY([&] { fire_unreal_init_for_cpp_mods(); });
+-                TRY([&] { setup_unreal_properties(); });
++                // Native server mode stops after ProcessEvent and C++ mod startup.
++                // The generic UE property bootstrap is not ABI-safe on this build and
++                // is not needed by the server-only loader.
++                UE4SS_DBG("[UE4SS] Linux: skipping generic UE property bootstrap; native mode active.\n");
+ 
+                 UE4SS_DBG("[UE4SS] Linux: full mode post-init done, starting event loop.\n");
+                 fprintf(stderr, "[UE4SS] Linux: full mode post-init done, starting event loop.\n");
+@@ -3258,11 +3265,8 @@ namespace RC
+                 }
+             }
+ #endif
+-            LuaMod::m_default_game_thread_method = settings_manager.General.DefaultExecuteInGameThreadMethod;
+-
+-            UE4SS_DBG( "[UE4SS] Linux: calling install_lua_mods()...\n");
+-            install_lua_mods();
+-            UE4SS_DBG( "[UE4SS] Linux: install_lua_mods() done.\n");
++            // Linux native mode intentionally skips Lua initialization. C++ mods use
++            // the ProcessEvent hook and do not require Lua lifecycle hooks.
+ 
+             // LuaMod::on_program_start() and fire_program_start_for_cpp_mods() require resolved
+             // UE function addresses (GUObjectArray, ProcessInternal, etc.) for hook registration
+@@ -3275,12 +3279,10 @@ namespace RC
+                 fprintf(stderr, "[UE4SS] Linux: full mode — GUObjectArray has %d elements. Starting mods with UE API support.\n",
+                     linux_get_num_elements());
+                 TRY([&] { start_cpp_mods(IsInitialStartup::Yes); });
+-                TRY([&] { LuaMod::on_program_start(); });
++                UE4SS_DBG( "[UE4SS] Linux: Lua lifecycle disabled; C++ mods only.\n");
+                 TRY([&] { fire_program_start_for_cpp_mods(); });
+ 
+-                UE4SS_DBG( "[UE4SS] Linux: calling start_lua_mods()...\n");
+-                start_lua_mods();
+-                UE4SS_DBG( "[UE4SS] Linux: start_lua_mods() done.\n");
++                UE4SS_DBG( "[UE4SS] Linux: Lua mods disabled.\n");
+             }
+             else
+             {
+@@ -3299,10 +3301,7 @@ namespace RC
+                 UE4SS_DBG( "[UE4SS] Linux: calling fire_program_start_for_cpp_mods() (limited mode)...\n");
+                 TRY([&] { fire_program_start_for_cpp_mods(); });
+                 UE4SS_DBG( "[UE4SS] Linux: fire_program_start_for_cpp_mods() done.\n");
+-                // Still try to start Lua mods — they may work partially without hooks
+-                UE4SS_DBG( "[UE4SS] Linux: calling start_lua_mods() (limited mode)...\n");
+-                TRY([&] { start_lua_mods(); });
+-                UE4SS_DBG( "[UE4SS] Linux: start_lua_mods() done (limited mode).\n");
++                UE4SS_DBG( "[UE4SS] Linux: Lua mods disabled; C++ mods only (limited mode).\n");
+             }
+ 
+             // Skip ObjectDumper::init() on Linux — it iterates GUObjectArray which crashes
+diff --git a/deps/third/CMakeLists.txt b/deps/third/CMakeLists.txt
+index 0d3a23f..e9893a6 100644
+--- a/deps/third/CMakeLists.txt
++++ b/deps/third/CMakeLists.txt
+@@ -106,16 +106,20 @@ else()
+     endif()
+ endif()
+ 
+-# Corrosion (Rust integration) - enables patternsleuth AOB signature scanning
+-FetchContent_Declare(
+-    Corrosion
+-    GIT_REPOSITORY https://github.com/UE4SS-RE/corrosion.git
+-    #TODO: Go back to main repo once this issue is fixed.
+-    GIT_TAG 52844733e14f095c947577627e367ee5f6458af7
+-    GIT_SHALLOW TRUE
+-    GIT_PROGRESS ON
+-)
+-add_subdirectory("corrosion")
++# Corrosion is optional for this Linux server build. The Palworld-specific
++# resolver uses explicit ELF/dlsym/AOB paths, so the Rust signature scanner is
++# not needed and would add a separate toolchain requirement.
++option(UE4SS_ENABLE_RUST_SIGNATURES "Build the Rust pattern scanner" OFF)
++if(UE4SS_ENABLE_RUST_SIGNATURES)
++    FetchContent_Declare(
++        Corrosion
++        GIT_REPOSITORY https://github.com/UE4SS-RE/corrosion.git
++        GIT_TAG 52844733e14f095c947577627e367ee5f6458af7
++        GIT_SHALLOW TRUE
++        GIT_PROGRESS ON
++    )
++    add_subdirectory("corrosion")
++endif()
+ 
+ # fmt
+ FetchContent_Declare(
+

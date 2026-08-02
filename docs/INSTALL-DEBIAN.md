@@ -150,7 +150,45 @@ journalctl --user -u palworld.service -n 120 --no-pager
 
 ログ確認が失敗した場合はサービスを停止し、フックイベント試験へ進まない。
 
-## 7. ロールバック
+## 7. 自作LinuxネイティブC++ローダ層
+
+対象サーバーでは、安定版UE4SS v3.0.2のLua経路を使わず、UE4SSをLua-freeのC++専用モードでビルドし、このリポジトリの`native-loader`を同じABIでリンクする。`native-loader/UE4SS-LINUX-NATIVE.patch`を一致するUE4SSソースへ適用し、`MemberVariableLayout.ini`は対象Palworld buildに対応するものだけを使用する。
+
+```bash
+GAME_ROOT=/home/serveradmin/servers/palworld
+REPO_DIR="$GAME_ROOT/.staging/palworld-server-auto-revive"
+UE4SS_SRC="$GAME_ROOT/.staging/native-build/ue4ss-src"
+UE4SS_BUILD="$GAME_ROOT/.staging/native-build/build-linux"
+UE4SS_LIB="$UE4SS_BUILD/Game__Dev__Linux64/lib/libUE4SS.so"
+
+git clone https://github.com/p7672716/palworld-server-auto-revive.git "$REPO_DIR"
+cmake -S "$REPO_DIR/native-loader" -B "$REPO_DIR/native-loader/build" -G Ninja \
+  -DUE4SS_SRC="$UE4SS_SRC" \
+  -DUE4SS_BUILD="$UE4SS_BUILD" \
+  -DUE4SS_LIB="$UE4SS_LIB"
+cmake --build "$REPO_DIR/native-loader/build" --parallel 2
+
+install -d "$BIN/Mods/PalworldServerAutoReviveNative/libs"
+install -m 0644 \
+  "$REPO_DIR/native-loader/build/PalworldServerAutoReviveNative.so" \
+  "$BIN/Mods/PalworldServerAutoReviveNative/libs/PalworldServerAutoReviveNative.so"
+install -m 0644 "$REPO_DIR/native-loader/MemberVariableLayout.ini" \
+  "$BIN/MemberVariableLayout.ini"
+```
+
+`UE4SS_SRC`、`UE4SS_BUILD`、`UE4SS_LIB`は同一ビルド由来でなければならない。対象サーバーではコンパイラ等もユーザー領域にステージしているため、`cmake`の実体や`PATH`はその環境に合わせる。別Palworld build向けの`.so`やレイアウトを流用しない。
+
+まず`mods.txt`は次の状態で、既存Lua行は無効にする。
+
+```text
+UE4SSStatus : 0
+PalworldServerAutoRevive : 0
+PalworldServerAutoReviveNative : 1
+```
+
+起動後、`UE4SS.log`にC++ MODロード、pre/postフック登録、`event bridge registered`が出て、サービス再起動がないことを確認する。3イベントの受入試験が完了するまで、導入前セーブバックアップを保持する。
+
+## 8. ロールバック
 
 ```bash
 systemctl --user stop palworld.service || true
