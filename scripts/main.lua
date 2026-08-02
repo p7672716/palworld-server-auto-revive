@@ -603,6 +603,11 @@ end
 log("main.lua loaded; server-side only; native revive path enabled")
 
 local function register_hooks()
+    if ProcessEventAvailable ~= true then
+        log("UE ProcessEvent hook is unavailable; hooks were not registered")
+        return
+    end
+
     log("registering hooks after delayed UE initialization")
 
     register_pre_post_hook(
