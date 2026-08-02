@@ -10,9 +10,9 @@ The mod is server-side only. No client mod is required.
 
 ## Important status
 
-This project targets the native Linux Palworld server through the community [UE4SS Linux native port](https://github.com/XarminaEu/ue4ss-linux). Palworld's official server-side mod documentation currently describes Windows dedicated servers, so the Linux path is community-supported and must be revalidated after Palworld updates.
+This project targets the native Linux Palworld server through a custom, Lua-free C++ layer built on the community [UE4SS Linux native port](https://github.com/XarminaEu/ue4ss-linux). Palworld's official server-side mod documentation currently describes Windows dedicated servers, so the Linux path is community-supported and must be revalidated after Palworld updates.
 
-The initial target server was Palworld Steam AppID 2394010, buildid 24445026, on Debian 13. The implementation is intentionally Lua-only so that the mod itself does not need a Windows DLL or a native C++ build.
+The initial target server was Palworld Steam AppID 2394010, buildid 24445026, on Debian 13. The production path is a native Linux C++ MOD; Lua remains disabled because the stable Linux port exposes only limited mode on this target.
 
 ### Debian target verification status (2026-08-02)
 
@@ -21,7 +21,7 @@ The repository was cloned to the target server and the MOD files are present. Th
 - archive: `/home/serveradmin/servers/palworld-backups/pre-mod-palworld-20260802T163237JST.tar.gz`
 - SHA256: `3919104f73d16ff554e062272f91d63281c11f660dcffb8877e07d2ed1543ee5`
 
-The target's Palworld build is `v1.0.2.100993`. The stable UE4SS Linux v3.0.2 library loads, but reports Linux limited mode and does not expose the UE hooks required by this MOD. The newer v3.0.26-linux-dev build reached full mode but then raised SIGSEGV during UE4SS initialization even with both Lua mods disabled, so it was rolled back. The target currently keeps `PalworldServerAutoRevive : 0` until a compatible UE4SS Linux build is available.
+The target's Palworld build is `v1.0.2.100993`. The stable UE4SS Linux v3.0.2 library loads, but reports Linux limited mode and does not expose the UE hooks required by this MOD. A custom Lua-free Linux build was then made compatible with this target's member layout and reached full mode without a restart; the native bridge loaded and registered both ProcessEvent callbacks. The three in-game acceptance tests remain the release gate.
 
 
 ## Behavior
@@ -35,7 +35,7 @@ The mod calls the game's `ReviveFromDying()` path. It does not write HP directly
 
 The Palbox event receives the exact `LastHandle` from the active-party slot update and verifies that the handle's current destination is the player's Palbox container. It does not scan every Palbox slot.
 
-See [SPEC.md](SPEC.md) for the full requirements and acceptance criteria.
+See [SPEC.md](SPEC.md) for the full requirements and acceptance criteria, and [native-loader/SPEC-NATIVE.md](native-loader/SPEC-NATIVE.md) for the C++ layer contract.
 
 ## Linux layout
 
@@ -47,6 +47,8 @@ Pal/Binaries/Linux/
 ├── UE4SS-settings.ini
 └── Mods/
     ├── mods.txt
+    ├── PalworldServerAutoReviveNative/
+    │   └── libs/PalworldServerAutoReviveNative.so
     └── PalworldServerAutoRevive/
         ├── README.md
         ├── SPEC.md
@@ -57,12 +59,12 @@ Pal/Binaries/Linux/
 
 ## Debian installation
 
-The repository is intended to be cloned directly as the UE4SS mod folder:
+The repository is intended to be cloned directly as the UE4SS MOD source folder. For the native path, build `native-loader` against the exact UE4SS source/build and copy the resulting `.so` into `Mods/PalworldServerAutoReviveNative/libs/`; do not download a binary built for another Palworld version.
 
 ```bash
 git clone https://github.com/p7672716/palworld-server-auto-revive.git \
   /home/serveradmin/servers/palworld/Pal/Binaries/Linux/Mods/PalworldServerAutoRevive
-printf 'PalworldServerAutoRevive : 1\n' \
+printf 'PalworldServerAutoReviveNative : 1\n' \
   >> /home/serveradmin/servers/palworld/Pal/Binaries/Linux/Mods/mods.txt
 ```
 
@@ -75,7 +77,8 @@ Do not start the server with the mod until a backup exists and the UE4SS archive
 The server log must first show:
 
 - UE4SS loaded through `LD_PRELOAD`;
-- this mod's `main.lua loaded`;
-- all three hook registrations succeeded.
+- `Starting C++ mod 'PalworldServerAutoReviveNative'`;
+- the native bridge's pre/post hook registration messages;
+- no `Caught signal`, `Segmentation fault`, or service restart.
 
 Then test each event with a disposable or already-backed-up world. The full test matrix is in [SPEC.md](SPEC.md).

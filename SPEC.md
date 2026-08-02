@@ -10,8 +10,8 @@
 - Steam AppID: 2394010
 - 初期確認時のbuildid: 24445026
 - Debian 13
-- UE4SS Linux native port v3.0.2
-- Lua MOD
+- custom Lua-free UE4SS Linux native layer
+- native C++ MOD
 
 Palworld本体更新で反射関数名や内部処理が変わる可能性があるため、ゲーム更新後は必ずフックのロードログと受け入れ試験を再実施する。
 
@@ -36,13 +36,13 @@ Palworld本体更新で反射関数名や内部処理が変わる可能性があ
 
 | イベント | 検出フック | 対象 |
 | --- | --- | --- |
-| パルボックスへ入れる確定後 | `PalOtomoHolderComponentBase:OnUpdateSlot` の `LastHandle` | 移動確定したその1体だけ |
+| パルボックスへ入れる確定後 | native bridgeの `SetOtomoSlot` pre/post | 移動確定したその1体だけ |
 | リスポーン完了直後 | `PalPlayerCharacter:CallRespawnDelegate` | そのプレイヤーの手持ちパーティ全体 |
 | 自ギルド拠点へ外から進入直後 | `PalBuilderComponent:OnEnterBaseCamp` | そのプレイヤーの手持ちパーティ全体 |
 
 ### 3.1 パルボックス移動
 
-`OnUpdateSlot` の `LastHandle` が保持する個体を1体だけ検査する。個体の保存パラメータに記録された現在の `SlotId.ContainerId` と、プレイヤーの `PalStorage.TargetContainer` のIDが一致する場合だけ、パルボックスへの移動確定とみなす。
+native bridgeは`SetOtomoSlot`のpre段で、指定スロットにいた個体を1体だけ退避し、post段でその同一ポインタだけを検査する。ボックス全走査はしない。`SetOtomoSlot`がパーティ並べ替えにも使われる本体更新では、イベント引数を再確認してから有効化する。
 
 これにより、手持ちパーティから別の場所へ移動する更新や、パーティ内の通常入替えを蘇生イベントと誤認しない。Palboxの全スロット、全ページ、他の個体は走査しない。
 
